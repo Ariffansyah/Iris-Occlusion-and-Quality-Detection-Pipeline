@@ -96,12 +96,15 @@ st.markdown('<h1 class="app-header">Wara Netra</h1>', unsafe_allow_html=True)
 st.markdown('<p class="app-subtitle">Iris Occlusion and Quality Detection Pipeline</p>', unsafe_allow_html=True)
 st.divider()
 
+# Convert uint8 image array to float64 normalized to [0.0, 1.0].
 def _img_as_float(img):
     return img.astype(np.float64) / 255.0
 
+# Convert normalized float image [0.0,1.0] to clipped uint8 [0,255].
 def _img_as_ubyte(img):
     return np.clip(img * 255.0, 0, 255).astype(np.uint8)
 
+# Draw a rectangular border of given width/value on a copy of the image array.
 def _draw_rect(img, r_start, r_end, c_start, c_end, value=255, width=2):
     out = img.copy()
     for w in range(width):
@@ -120,11 +123,13 @@ def _draw_rect(img, r_start, r_end, c_start, c_end, value=255, width=2):
             out[r_start:r_end, c] = value
     return out
 
+# Create a boolean disk-shaped structuring element with the given radius.
 def _disk(radius):
     r = int(radius)
     y, x = np.ogrid[-r:r+1, -r:r+1]
     return (x*x + y*y) <= r*r
 
+# Rasterize an integer line (Bresenham-like), returning row and column index arrays.
 def _draw_line(r0, c0, r1, c1):
     rr, cc = [], []
     dr = abs(r1 - r0)
@@ -147,6 +152,7 @@ def _draw_line(r0, c0, r1, c1):
             c += sc
     return np.array(rr, dtype=np.intp), np.array(cc, dtype=np.intp)
 
+# Canny-style edge detector: blur, gradients, non-maximum suppression, and hysteresis.
 def _canny(image, sigma=1.0, low_threshold=0.1, high_threshold=0.3):
     blurred = gaussian_filter(image, sigma=sigma)
 
@@ -205,6 +211,7 @@ def _canny(image, sigma=1.0, low_threshold=0.1, high_threshold=0.3):
 
     return edges
 
+# Detect line segments via Hough accumulator + grouping into segments.
 def _hough_lines(edges, threshold=30, line_length=50, line_gap=10):
     rows, cols = edges.shape
     num_thetas = max(rows, cols)
@@ -269,6 +276,7 @@ def _hough_lines(edges, threshold=30, line_length=50, line_gap=10):
 
     return lines if lines else None
 
+# Compute a centered square ROI slice for a frame given a scale factor.
 def _roi_slice(shape, scale=0.55):
     h, w = shape[:2]
     size = int(min(h, w) * scale)
@@ -280,6 +288,7 @@ def _roi_slice(shape, scale=0.55):
     c_end = min(w, cx + half + size % 2)
     return slice(r_start, r_end), slice(c_start, c_end)
 
+# Run the full occlusion pipeline (grayscale, glare/frame masks, ROI metrics, verdict).
 def process_pipeline(image_pil, glare_threshold, kernel_size, hough_threshold):
     img_gray = image_pil.convert("L")
     img_array = np.array(img_gray, dtype=np.uint8)
